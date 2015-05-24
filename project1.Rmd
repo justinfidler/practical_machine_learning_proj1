@@ -1,0 +1,136 @@
+Practical Machine Learning Project 1
+========
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a
+large amount of data about personal activity relatively inexpensively. These type of devices are part
+of the quantified self movement a group of enthusiasts who take measurements about themselves
+regularly to improve their health, to find patterns in their behavior, or because they are tech
+geeks. One thing that people regularly do is quantify how much of a particular activity they do, but
+they rarely quantify how well they do it. In this project, your goal will be to use data from
+accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts
+correctly and incorrectly in 5 different ways. 
+
+Class A corresponds to the specified execution of the exercise, while
+the other 4 classes correspond to common mistakes.
+Participants were supervised by an experienced weight lifter
+to make sure the execution complied to the manner they were supposed to
+simulate. The exercises were performed by six male participants aged between
+20-28 years, with little weight lifting experience. We made sure that all
+participants could easily simulate the mistakes in a safe and controlled manner by
+using a relatively light dumbbell (1.25kg).
+
+Downloading Initial Training and Test Datasets
+--------
+
+```{r cache=TRUE}
+download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", method="curl", destfile="training.csv",)
+trainingDF <- as.data.frame(read.csv("training.csv",na.strings = c("#DIV/0!","NA")))
+download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv",method="curl",destfile="testing.csv")
+testingDF <- as.data.frame(read.csv("testing.csv",na.strings = c("#DIV/0!","NA")))
+```
+Preprocessing Data
+--------
+On inspection of this data, many of the features are mostly "na".  These are not useful to
+a random forest algorithm so we will drop them from the datasets.
+```{r cache=TRUE}
+library(caret);
+library(randomForest);
+
+
+
+
+histogram(classe)
+
+trainingDF    <- trainingDF[! names(trainingDF) %in% c("amplitude_yaw_belt","amplitude_yaw_dumbbell","amplitude_yaw_forearm")]
+trainingDF    <- trainingDF[,colSums(is.na(trainingDF)) < 1000]
+trainingDF    <- trainingDF[! names(trainingDF) %in% c("X","user_name","raw_timestamp_part_1","raw_timestamp_part_2","cvtd_timestamp")]
+
+set.seed(222)
+
+```
+Partitioning the Training Set for Cross Validation
+-----
+To cross-validate the model, we'll prepartition the model to reserve some of the data for
+cross validation.
+```{r cache=TRUE}
+split <- createDataPartition(classe,p=.8,list=FALSE)
+dim(trainingDF)
+validationDF <- trainingDF[split,]
+trainingDF <- trainingDF[-split,]
+
+
+dim(validationDF)
+dim(trainingDF)
+
+classe        <- trainingDF$classe
+trainingDF    <- trainingDF[!names(trainingDF) %in% c("classe")]
+
+```
+
+Training Model as a Random Forest
+----------
+Using the randomForest package, we train the model.
+
+```{r cache=TRUE }
+
+modFitAll <- randomForest(classe~., data=trainingDF,importance=TRUE)
+modFitAll
+```
+
+Preprocessing the Test Set
+-----
+Read.csv handled the test.csv file slightly differently than the train.csv
+o we have to format the testing dataframe a bit before we can feed it to predict().
+
+```{r cache=TRUE}
+testingDF <- testingDF[ , names(testingDF) %in% c(names(trainingDF)) ]
+
+testingDF$magnet_dumbbell_z <- as.numeric(testingDF$magnet_dumbbell_z)
+testingDF$magnet_forearm_y  <- as.numeric(testingDF$magnet_forearm_y)
+testingDF$magnet_forearm_z  <- as.numeric(testingDF$magnet_forearm_z)
+
+levels(testingDF$new_window) <- c("no","yes")
+```
+
+Evaluating the Training Model
+-------
+Let's see how well the training model can predict on the training data.  We
+expect this to work very well, if it doesnt that would point to something
+being very wrong.
+
+As we can see the P-value is extremely low, the model looks good so far.
+
+```{r cache=TRUE}
+predict_train <- predict(modFitAll,newdata=trainingDF)
+confusionMatrix(predict_train,classe)
+
+```
+Cross-Validating the model
+-----
+Let's see how the model performs on the data we left out of the training set.
+
+
+As we can see the accuracy is 98.6% which implies the out-of-sample error is 1.4%, this
+model should predict very well.
+
+```{r cache=TRUE}
+validation_classe <- validationDF$classe
+validationDF <- validationDF[ , names(validationDF) %in% c(names(trainingDF)) ]
+
+
+predict_validation <-predict(modFitAll,newdata=validationDF)
+confusionMatrix(predict_validation,validation_classe)
+
+
+```
+
+Predicting the Test Set
+-----
+Now that we have confidence in our prediction model, let's apply it to the test
+data set.
+
+
+```{r cache=TRUE}
+predict_test  <- predict(modFitAll,newdata=testingDF )
+predict_test
+```
+
